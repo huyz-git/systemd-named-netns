@@ -30,3 +30,11 @@
 
 # Set up the host to accept NATed traffic; see netns-nat file for detail
 #NAT_ACCEPT_TRAFFIC=1
+
+# If you want to use IPv6.
+#IP6ADDR_OUTSIDE=2001:db8:64::1/64
+#IP6ADDR=2001:db8:64::2/64
+#GATEWAY6=2001:db8:64::1/64
+
+# If you want to NAT IPv6 traffic.
+#NAT_IPV6=1

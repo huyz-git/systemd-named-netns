@@ -30,6 +30,11 @@ autoconfigure_tunnel_up_outside() {
 		ip address add ${IPADDR_OUTSIDE} dev ${DEVNAME_OUTSIDE}
 	fi
 
+	# add ipv6 address at global end
+	if [ ! -z "${IP6ADDR_OUTSIDE}" ]; then
+		ip -6 address add ${IP6ADDR_OUTSIDE} dev ${DEVNAME_OUTSIDE}
+	fi
+
 	return 0 # additional precation against "set -e" in case of future mods of this function
 }
 
@@ -39,9 +44,17 @@ autoconfigure_tunnel_up_inside() {
 		ip address add ${IPADDR} dev ${DEVNAME_INSIDE}
 	fi
 
+	# add ipv6 address at netns end
+	if [ ! -z "${IP6ADDR}" ]; then
+		ip -6 address add ${IP6ADDR} dev ${DEVNAME_INSIDE}
+	fi
+
 	# setup default route
 	if [ ! -z "${GATEWAY}" ]; then
 		ip route add default via ${GATEWAY%%/*} dev ${DEVNAME_INSIDE} onlink
+	fi
+	if [ ! -z "${GATEWAY6}" ]; then
+		ip -6 route add default via ${GATEWAY6%%/*} dev ${DEVNAME_INSIDE} onlink
 	fi
 
 	# if DHCP is configured
@@ -92,12 +105,20 @@ autoconfigure_nat_up_outside() {
 	# set up NAT
 	# in POSTROUTING we cannot select via source interface, so we use source ip address here
 	iptables -t nat -A POSTROUTING -s ${IPADDR_OUTSIDE} -j MASQUERADE
+	if [ "${NAT_IPV6}" == "1" ]; then
+		ip6tables -t nat -A POSTROUTING -s ${IP6ADDR_OUTSIDE} -j MASQUERADE
+	fi
 
 	if [ "${NAT_ACCEPT_TRAFFIC}" == "1" ]; then
 		iptables -A FORWARD -i ${DEVNAME_OUTSIDE} -j ACCEPT
 		iptables -A FORWARD -o ${DEVNAME_OUTSIDE} -j ACCEPT
 		#Accept related traffic
 		iptables -I INPUT -i ${DEVNAME_OUTSIDE} -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+		if [ "${NAT_IPV6}" == "1" ]; then
+			ip6tables -A FORWARD -i ${DEVNAME_OUTSIDE} -j ACCEPT
+			ip6tables -A FORWARD -o ${DEVNAME_OUTSIDE} -j ACCEPT
+			ip6tables -I INPUT -i ${DEVNAME_OUTSIDE} -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+		fi
 	fi
 
 	return 0 # additional precation against "set -e" in case of future mods of this function
@@ -109,6 +130,9 @@ autoconfigure_nat_up_inside() {
 	# add default route if gateway undefined
 	if [ -z "${GATEWAY}" -a -n "${IPADDR_OUTSIDE}" ]; then
 		GATEWAY="${IPADDR_OUTSIDE}"
+	fi
+	if [ -z "${GATEWAY6}" -a -n "${IP6ADDR_OUTSIDE}" ]; then
+		GATEWAY="${IP6ADDR_OUTSIDE}"
 	fi
 
 	return 0 # additional precation against "set -e" in case of future mods of this function
@@ -123,10 +147,20 @@ autoconfigure_nat_down_inside() {
 autoconfigure_nat_down_outside() {
 	# remove NAT
 	iptables -t nat -D POSTROUTING -s ${IPADDR_OUTSIDE} -j MASQUERADE
+	if [ "${NAT_IPV6}" == "1" ]; then
+		ip6tables -t nat -D POSTROUTING -s ${IP6ADDR_OUTSIDE} -j MASQUERADE
+	fi
 
-	iptables -D FORWARD -i ${DEVNAME_OUTSIDE} -j ACCEPT
-	iptables -D FORWARD -o ${DEVNAME_OUTSIDE} -j ACCEPT
-	iptables -D INPUT -i ${DEVNAME_OUTSIDE} -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+	if [ "${NAT_ACCEPT_TRAFFIC}" == "1" ]; then
+		iptables -D FORWARD -i ${DEVNAME_OUTSIDE} -j ACCEPT
+		iptables -D FORWARD -o ${DEVNAME_OUTSIDE} -j ACCEPT
+		iptables -D INPUT -i ${DEVNAME_OUTSIDE} -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+		if [ "${NAT_IPV6}" == "1" ]; then
+			ip6tables -D FORWARD -i ${DEVNAME_OUTSIDE} -j ACCEPT
+			ip6tables -D FORWARD -o ${DEVNAME_OUTSIDE} -j ACCEPT
+			ip6tables -D INPUT -i ${DEVNAME_OUTSIDE} -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+		fi
+	fi
 
 	autoconfigure_tunnel_down_outside
 
